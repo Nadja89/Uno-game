@@ -28,3 +28,11 @@ class Player:
     def __str__(self) -> str:
         role = "bot" if self.is_bot else "player"
         return f"{self.name} ({role}, {self.card_count()} cards)"
+    
+def clone(self) -> "Player":
+    return Player(
+        name=self.name,
+        is_bot=self.is_bot,
+        hand=list(self.hand),
+        called_uno=self.called_uno,
+    )

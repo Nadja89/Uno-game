@@ -54,3 +54,9 @@ class Deck:
 
     def cards_remaining(self) -> int:
         return len(self.draw_pile)
+    
+def clone(self) -> "Deck":
+    new_deck = Deck.__new__(Deck)
+    new_deck.draw_pile = list(self.draw_pile)
+    new_deck.discard_pile = list(self.discard_pile)
+    return new_deck
