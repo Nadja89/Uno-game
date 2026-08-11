@@ -42,15 +42,17 @@ class GameState:
         return self.deck.top_card()
 
     def legal_moves(self) -> list[Card]:
+        if self.pending_draw > 0:
+            return []
         return self.current_player().legal_moves(self.top_card(), self.active_color)
 
-
     def play_card(self, card: Card, chosen_color: Color | None = None) -> None:
-        player = self.current_player()
+        if self.pending_draw > 0:
+            raise ValueError("Must draw pending cards before playing!")
 
+        player = self.current_player()
         if card not in player.legal_moves(self.top_card(), self.active_color):
             raise ValueError(f"The move {card} is not legal!")
-
         if card.is_wild() and chosen_color is None:
             raise ValueError("Must choose color!")
 
@@ -112,19 +114,19 @@ class GameState:
             f"Direction: {'forward' if self.direction == 1 else 'back'}"
         )
     
-def clone(self) -> "GameState":
-    new_state = GameState.__new__(GameState)
-    new_state.players = [p.clone() for p in self.players]
-    new_state.deck = self.deck.clone()
-    new_state.direction = self.direction
-    new_state.current_player_index = self.current_player_index
-    new_state.active_color = self.active_color
-    new_state.pending_draw = self.pending_draw
-    new_state.finished = self.finished
-    new_state.winner = None
-    if self.winner is not None:
-        for i, p in enumerate(self.players):
-            if p is self.winner:
-                new_state.winner = new_state.players[i]
-                break
-    return new_state
+    def clone(self) -> "GameState":
+        new_state = GameState.__new__(GameState)
+        new_state.players = [p.clone() for p in self.players]
+        new_state.deck = self.deck.clone()
+        new_state.direction = self.direction
+        new_state.current_player_index = self.current_player_index
+        new_state.active_color = self.active_color
+        new_state.pending_draw = self.pending_draw
+        new_state.finished = self.finished
+        new_state.winner = None
+        if self.winner is not None:
+            for i, p in enumerate(self.players):
+                if p is self.winner:
+                    new_state.winner = new_state.players[i]
+                    break
+        return new_state
