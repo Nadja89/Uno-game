@@ -90,6 +90,8 @@ class GameState:
     def _apply_card_effect(self, card: Card) -> None:
         if card.card_type == CardType.REVERSE:
             self.direction *= -1
+            if len(self.players) == 2:
+                self._move_index_forward()
         elif card.card_type == CardType.SKIP:
             self._move_index_forward()
         elif card.card_type == CardType.DRAW_TWO:

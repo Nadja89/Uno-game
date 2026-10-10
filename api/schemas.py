@@ -15,7 +15,7 @@ class CardIn(BaseModel):
 
 class PlayCardRequest(BaseModel):
     card: CardIn
-    chosen_color: str | None = None  # obavezno samo za wild karte
+    chosen_color: str | None = None  
 
 
 class GameStateOut(BaseModel):
@@ -30,3 +30,17 @@ class GameStateOut(BaseModel):
     your_hand: list[CardOut]
     opponent_card_count: int
     bot_action: str | None = None
+
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

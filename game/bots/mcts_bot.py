@@ -1,34 +1,47 @@
 import math
 import random
 
+from config import DEFAULT_MCTS, MCTSConfig
 from game.card import Color
 from game.game_state import GameState
-from game.bots.heuristics import heuristic_pick
+from game.bots.heuristics import heuristic_pick, random_pick
 
 ALL_COLORS = [Color.RED, Color.YELLOW, Color.GREEN, Color.BLUE]
 
 
-def determinize(state: GameState, bot_index: int) -> GameState:
+def determinize(state: GameState, bot_index: int, excluded_colors: dict | None = None) -> GameState:
     clone = state.clone()
-    bot = clone.players[bot_index]
+    excluded_colors = excluded_colors or {}
 
-    unseen: list = list(clone.deck.draw_pile)
+    remaining: list = list(clone.deck.draw_pile)
     for i, player in enumerate(clone.players):
         if i != bot_index:
-            unseen.extend(player.hand)
+            remaining.extend(player.hand)
 
-    random.shuffle(unseen)
+    random.shuffle(remaining)
 
-    idx = 0
     for i, player in enumerate(clone.players):
-        if i != bot_index:
-            n = len(player.hand)
-            player.hand = unseen[idx: idx + n]
-            idx += n
+        if i == bot_index:
+            continue
 
-    clone.deck.draw_pile = unseen[idx:]
+        n = len(player.hand)
+        excluded = excluded_colors.get(i, set())
+
+        if excluded:
+            preferred = [c for c in remaining if c.is_wild() or c.color not in excluded]
+            chosen = preferred[:n]
+            if len(chosen) < n:
+                leftover = [c for c in remaining if c not in chosen]
+                chosen += leftover[: n - len(chosen)]
+        else:
+            chosen = remaining[:n]
+
+        player.hand = chosen
+        for c in chosen:
+            remaining.remove(c)
+
+    clone.deck.draw_pile = remaining
     return clone
-
 
 def get_actions(state: GameState) -> list[tuple]:
     if state.finished:
@@ -74,7 +87,7 @@ class MCTSNode:
         return self.state.finished
 
 
-def ucb1_select(node: MCTSNode, c: float = 1.4) -> tuple[tuple, MCTSNode]:
+def ucb1_select(node: MCTSNode, c: float = DEFAULT_MCTS.exploration_c) -> tuple[tuple, MCTSNode]:
     best_score = -1.0
     best_pair = None
     for action, child in node.children:
@@ -97,12 +110,15 @@ def expand(node: MCTSNode) -> MCTSNode:
     return child
 
 
-def rollout(state: GameState, max_turns: int = 300) -> int | None:
+def rollout(state: GameState, cfg: MCTSConfig = DEFAULT_MCTS) -> int | None:
     sim_state = state.clone()
     turns = 0
-    while not sim_state.finished and turns < max_turns:
+    while not sim_state.finished and turns < cfg.rollout_max_turns:
         actions = get_actions(sim_state)
-        action = heuristic_pick(sim_state, actions)
+        if cfg.rollout_policy == "random":
+            action = random_pick(sim_state, actions)
+        else:
+            action = heuristic_pick(sim_state, actions, cfg.heuristic)
         apply_action(sim_state, action)
         turns += 1
 
@@ -126,7 +142,10 @@ def backpropagate(node: MCTSNode, winner_index: int | None) -> None:
         node = node.parent
 
 
-def mcts_search(root_state: GameState, iterations: int = 100, c: float = 1.4) -> MCTSNode:
+def mcts_search(root_state: GameState, iterations: int | None = None,
+                c: float | None = None, cfg: MCTSConfig = DEFAULT_MCTS) -> MCTSNode:
+    iterations = cfg.iterations if iterations is None else iterations
+    c = cfg.exploration_c if c is None else c
     root = MCTSNode(root_state.clone())
 
     for _ in range(iterations):
@@ -138,31 +157,47 @@ def mcts_search(root_state: GameState, iterations: int = 100, c: float = 1.4) ->
         if not node.is_terminal() and not node.is_fully_expanded():
             node = expand(node)
 
-        winner_index = rollout(node.state)
+        winner_index = rollout(node.state, cfg)
         backpropagate(node, winner_index)
 
     return root
 
 
 def choose_move(state: GameState, bot_index: int,
-                 num_determinizations: int = 10, iterations: int = 100) -> tuple:
+                num_determinizations: int | None = None, iterations: int | None = None,
+                excluded_colors: dict | None = None,
+                cfg: MCTSConfig = DEFAULT_MCTS) -> tuple:
+    num_determinizations = cfg.determinizations if num_determinizations is None else num_determinizations
+    iterations = cfg.iterations if iterations is None else iterations
+    if not cfg.use_belief:
+        excluded_colors = None
+
     action_visits: dict[tuple, int] = {}
 
     for _ in range(num_determinizations):
-        det_state = determinize(state, bot_index)
-        root = mcts_search(det_state, iterations=iterations)
+        det_state = determinize(state, bot_index, excluded_colors)
+        root = mcts_search(det_state, iterations=iterations, cfg=cfg)
         for action, child in root.children:
             action_visits[action] = action_visits.get(action, 0) + child.visits
 
     if not action_visits:
         return ("draw",)
 
-    best_action = max(action_visits, key=action_visits.get)
-    return best_action
+    return max(action_visits, key=action_visits.get)
 
 
 def bot_take_turn(state: GameState, bot_index: int,
-                   num_determinizations: int = 10, iterations: int = 100) -> tuple:
-    action = choose_move(state, bot_index, num_determinizations, iterations)
+                  num_determinizations: int | None = None, iterations: int | None = None,
+                  excluded_colors: dict | None = None,
+                  cfg: MCTSConfig = DEFAULT_MCTS) -> tuple:
+    action = choose_move(state, bot_index, num_determinizations, iterations, excluded_colors, cfg)
     apply_action(state, action)
     return action
+
+
+def play_bot_turns(state: GameState, bot_index: int, excluded_colors: dict | None = None,
+                   cfg: MCTSConfig = DEFAULT_MCTS) -> list[tuple]:
+    actions = []
+    while not state.finished and state.current_player_index == bot_index:
+        actions.append(bot_take_turn(state, bot_index, excluded_colors=excluded_colors, cfg=cfg))
+    return actions

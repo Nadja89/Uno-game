@@ -2,6 +2,7 @@ from game.card import Card, Color, CardType
 from game.deck import Deck
 from game.game_state import GameState
 from game.player import Player
+from game.belief import BeliefState
 
 
 def card_to_dict(card: Card) -> dict:
@@ -70,3 +71,15 @@ def game_state_from_dict(d: dict) -> GameState:
         state.players[d["winner_index"]] if d["winner_index"] is not None else None
     )
     return state
+
+def game_data_to_dict(state: GameState, belief: BeliefState) -> dict:
+    return {
+        "game_state": game_state_to_dict(state),
+        "belief": belief.to_dict(),
+    }
+
+
+def game_data_from_dict(d: dict) -> tuple[GameState, BeliefState]:
+    state = game_state_from_dict(d["game_state"])
+    belief = BeliefState.from_dict(d.get("belief", {}))
+    return state, belief

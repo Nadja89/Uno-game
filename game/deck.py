@@ -37,7 +37,7 @@ class Deck:
 
     def _reshuffle_discard_into_draw(self) -> None:
         if len(self.discard_pile) <= 1:
-            raise RuntimeError("Error!")
+            raise RuntimeError("The draw pile is empty and there are not enough discarded cards to reshuffle.")
 
         top_card = self.discard_pile.pop()
         self.draw_pile = self.discard_pile
@@ -49,7 +49,7 @@ class Deck:
 
     def top_card(self) -> Card:
         if not self.discard_pile:
-            raise RuntimeError("Error!")
+            raise RuntimeError("The discard pile is empty, so there is no top card.")
         return self.discard_pile[-1]
 
     def cards_remaining(self) -> int:

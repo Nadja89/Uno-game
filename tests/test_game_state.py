@@ -96,6 +96,19 @@ def test_reverse_changes_direction():
     assert gs.direction == -1
 
 
+def test_reverse_acts_as_skip_in_two_player_game():
+    top = Card(Color.RED, CardType.NUMBER, 5)
+    reverse = Card(Color.RED, CardType.REVERSE)
+    gs = make_bare_state(
+        p0_hand=[reverse, Card(Color.GREEN, CardType.NUMBER, 7)],
+        p1_hand=[Card(Color.BLUE, CardType.NUMBER, 1)],
+        top_card=top,
+        current_player_index=0,
+    )
+    gs.play_card(reverse)
+    assert gs.current_player_index == 0
+
+
 def test_skip_gives_effectively_extra_turn_in_two_player_game():
     top = Card(Color.RED, CardType.NUMBER, 5)
     skip = Card(Color.RED, CardType.SKIP)
