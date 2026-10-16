@@ -68,10 +68,11 @@ def get_current_user(
     return user
 
 
-def serialize_state(game_id: str, state: GameState, bot_action: str | None = None) -> GameStateOut:
+def serialize_state(game_id: str, state: GameState, bot_actions: list[str] | None = None) -> GameStateOut:
     top = state.top_card()
     human = state.players[HUMAN_INDEX]
     bot = state.players[BOT_INDEX]
+    playable = [] if state.finished or state.current_player_index != HUMAN_INDEX else state.legal_moves()
 
     return GameStateOut(
         game_id=game_id,
@@ -82,12 +83,18 @@ def serialize_state(game_id: str, state: GameState, bot_action: str | None = Non
         pending_draw=state.pending_draw,
         finished=state.finished,
         winner=state.winner.name if state.winner else None,
+        you_won=state.winner is human,
         your_hand=[
             CardOut(color=c.color.value, card_type=c.card_type.value, value=c.value)
             for c in human.hand
         ],
+        playable_cards=[
+            CardOut(color=c.color.value, card_type=c.card_type.value, value=c.value)
+            for c in playable
+        ],
         opponent_card_count=bot.card_count(),
-        bot_action=bot_action,
+        bot_action=" ".join(bot_actions) if bot_actions else None,
+        bot_actions=bot_actions or [],
     )
 
 
@@ -118,19 +125,25 @@ def find_card_in_hand(hand: list[Card], color: str, card_type: str, value: int |
     raise HTTPException(status_code=400, detail="Card not found in the player's hand.")
 
 
+def _card_name(card: Card) -> str:
+    if card.card_type == CardType.WILD_DRAW_FOUR:
+        return "wild draw four"
+    if card.card_type == CardType.WILD:
+        return "wild"
+    return str(card).replace("_", " ")
+
+
 def _describe_action(action: tuple) -> str:
     if action[0] == "draw":
         return "Bot drew a card."
     _, card, color = action
-    extra = f" (color: {color.value})" if color else ""
-    return f"Bot played: {card}{extra}"
+    chosen = f" and chose {color.value}" if color else ""
+    return f"Bot played {_card_name(card)}{chosen}."
 
 
-def run_bot(state: GameState, belief: BeliefState) -> str | None:
+def run_bot(state: GameState, belief: BeliefState) -> list[str]:
     actions = play_bot_turns(state, BOT_INDEX, excluded_colors=belief.excluded_colors, cfg=MCTS)
-    if not actions:
-        return None
-    return " ".join(_describe_action(a) for a in actions)
+    return [_describe_action(a) for a in actions]
 
 
 @app.get("/")
@@ -238,13 +251,13 @@ def play_card(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    bot_action_text = run_bot(state, belief)
+    bot_lines = run_bot(state, belief)
 
     row.state = game_data_to_dict(state, belief)
     row.finished = state.finished
     db.commit()
 
-    return serialize_state(game_id, state, bot_action=bot_action_text)
+    return serialize_state(game_id, state, bot_actions=bot_lines)
 
 
 @app.post("/game/{game_id}/draw", response_model=GameStateOut)
@@ -264,10 +277,10 @@ def draw_card(
     state.draw_card()
     belief.reset_player(HUMAN_INDEX)
 
-    bot_action_text = run_bot(state, belief)
+    bot_lines = run_bot(state, belief)
 
     row.state = game_data_to_dict(state, belief)
     row.finished = state.finished
     db.commit()
 
-    return serialize_state(game_id, state, bot_action=bot_action_text)
+    return serialize_state(game_id, state, bot_actions=bot_lines)

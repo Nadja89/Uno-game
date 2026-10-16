@@ -27,9 +27,12 @@ class GameStateOut(BaseModel):
     pending_draw: int
     finished: bool
     winner: str | None = None
+    you_won: bool = False
     your_hand: list[CardOut]
+    playable_cards: list[CardOut] = []
     opponent_card_count: int
     bot_action: str | None = None
+    bot_actions: list[str] = []
 
 class RegisterRequest(BaseModel):
     username: str
